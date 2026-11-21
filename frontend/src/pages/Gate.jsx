@@ -8,6 +8,8 @@ export default function Gate({ onExpired }) {
   const [slotId, setSlotId] = useState('');
   const [info, setInfo] = useState(null);
   const [msg, setMsg] = useState(null);
+  const [token, setToken] = useState('');
+  const [pass, setPass] = useState(null);
 
   const loadSlots = async () => {
     try { setSlots(await api('/slots')); } catch (e) { if (e.message === 'Login required') onExpired(); }
@@ -36,12 +38,34 @@ export default function Gate({ onExpired }) {
     loadSlots();
   });
 
+  const verify = () => run(async () => {
+    const r = await api('/bookings/verify/' + token.trim());
+    setPass(r);
+    if (r.valid) { setPlate(r.booking.plate); setSlotId(String(r.booking.slot_id)); }
+  });
+
   const free = slots.filter((s) => s.status === 'free');
 
   return (
     <section>
       <h2>Security gate</h2>
       <div className="panel">
+        <h3>Verify visitor QR pass</h3>
+        <div className="row">
+          <input placeholder="Scan or paste the pass code" value={token} onChange={(e) => setToken(e.target.value)} />
+          <button className="ghost dark" disabled={!token} onClick={verify}>Verify pass</button>
+        </div>
+        {pass && (
+          <div className={pass.valid ? 'notice' : 'error'}>
+            {pass.valid
+              ? <>Valid pass for <b>{pass.booking.plate}</b>, slot <b>{pass.booking.slot}</b>. Plate and slot are filled in below: click <b>Allow entry</b>.</>
+              : <>Pass is not valid{pass.booking && pass.booking.status !== 'active' ? ' (' + pass.booking.status + ')' : ' (outside its time window)'}.</>}
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>Vehicle entry and exit</h3>
         <label className="field">Number plate
           <input placeholder="e.g. TN01AB1234" value={plate} onChange={(e) => setPlate(e.target.value)} />
         </label>

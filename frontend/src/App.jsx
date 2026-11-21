@@ -5,19 +5,26 @@ import Slots from './pages/Slots.jsx';
 import Vehicles from './pages/Vehicles.jsx';
 import Gate from './pages/Gate.jsx';
 import Permits from './pages/Permits.jsx';
+import Bookings from './pages/Bookings.jsx';
+import Violations from './pages/Violations.jsx';
+import MyViolations from './pages/MyViolations.jsx';
+import Analytics from './pages/Analytics.jsx';
 
 const SLOTS = ['slots', 'Parking Slots'];
 const VEHICLES = ['vehicles', 'My Vehicles'];
+const BOOKINGS = ['bookings', 'Book a Slot'];
+const MYVIOL = ['myviol', 'My Violations'];
 const GATE = ['gate', 'Security Gate'];
 const PERMITS = ['permits', 'Permits'];
+const VIOL = ['violations', 'Violations'];
+const ANALYTICS = ['analytics', 'Analytics'];
 
-// Tabs shown per role. More screens (bookings, violations, analytics) are added later.
 const TABS = {
-  student: [SLOTS, VEHICLES],
-  staff: [SLOTS, VEHICLES],
-  visitor: [SLOTS, VEHICLES],
-  security: [SLOTS, GATE],
-  admin: [SLOTS, GATE, PERMITS],
+  student: [SLOTS, VEHICLES, MYVIOL],
+  staff: [SLOTS, VEHICLES, MYVIOL],
+  visitor: [SLOTS, VEHICLES, BOOKINGS, MYVIOL],
+  security: [SLOTS, GATE, VIOL],
+  admin: [SLOTS, GATE, PERMITS, VIOL, ANALYTICS],
 };
 
 export default function App() {
@@ -46,8 +53,12 @@ export default function App() {
       <main className="content">
         {tab === 'slots' && <Slots user={user} onExpired={logout} />}
         {tab === 'vehicles' && <Vehicles onExpired={logout} />}
+        {tab === 'bookings' && <Bookings onExpired={logout} />}
+        {tab === 'myviol' && <MyViolations onExpired={logout} />}
         {tab === 'gate' && <Gate onExpired={logout} />}
         {tab === 'permits' && <Permits onExpired={logout} />}
+        {tab === 'violations' && <Violations onExpired={logout} />}
+        {tab === 'analytics' && <Analytics onExpired={logout} />}
       </main>
     </div>
   );
