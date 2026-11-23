@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
-// Security gate: look up a plate, let a vehicle in (choose slot) or record its exit.
+// Security gate: look up a plate, verify visitor QR passes, let a vehicle in or record its exit.
+// Slots are assigned automatically: the first free slot in the owner's zone.
 export default function Gate({ onExpired }) {
   const [plate, setPlate] = useState('');
+  const [zones, setZones] = useState([]);
   const [slots, setSlots] = useState([]);
   const [slotId, setSlotId] = useState('');
   const [info, setInfo] = useState(null);
@@ -12,7 +14,14 @@ export default function Gate({ onExpired }) {
   const [pass, setPass] = useState(null);
 
   const loadSlots = async () => {
-    try { setSlots(await api('/slots')); } catch (e) { if (e.message === 'Login required') onExpired(); }
+    try {
+      const [z, s] = await Promise.all([api('/zones'), api('/slots')]);
+      setZones(z); setSlots(s);
+      return { zones: z, slots: s };
+    } catch (e) {
+      if (e.message === 'Login required') onExpired();
+      return { zones, slots };
+    }
   };
   useEffect(() => { loadSlots(); const t = setInterval(loadSlots, 5000); return () => clearInterval(t); }, []);
 
@@ -22,16 +31,50 @@ export default function Gate({ onExpired }) {
     try { await fn(); } catch (e) { setMsg({ type: 'error', text: e.message }); }
   };
 
+  // First free slot (lowest id) in the zone that allows this owner's role.
+  const autoSlot = (role, data) => {
+    const zone = data.zones.find((z) => z.allowed_roles.includes(role));
+    if (!zone) return null;
+    return data.slots.filter((s) => s.zone_id === zone.id && s.status === 'free').sort((a, b) => a.id - b.id)[0] || null;
+  };
+
   const lookup = () => run(async () => {
-    setInfo(await api('/vehicles/lookup/' + clean()));
+    const v = await api('/vehicles/lookup/' + clean());
+    setInfo(v);
+    if (v.owner_role === 'visitor') {
+      setSlotId('');
+      setMsg({ type: 'ok', text: 'Visitor vehicle: verify the visitor QR pass above to fill in the booked slot.' });
+      return;
+    }
+    const data = await loadSlots();
+    const s = autoSlot(v.owner_role, data);
+    if (s) {
+      setSlotId(String(s.id));
+      setMsg({ type: 'ok', text: 'Slot assigned automatically: ' + s.label + '. Click Allow entry to confirm.' });
+    } else {
+      setSlotId('');
+      setMsg({ type: 'error', text: 'No free slot left in the ' + v.owner_role + ' zone.' });
+    }
   });
+
   const entry = () => run(async () => {
-    if (!slotId) throw new Error('Choose a slot first');
-    const r = await api('/entry', 'POST', { plate: clean(), slot_id: Number(slotId) });
-    setMsg({ type: 'ok', text: r.message + ' for ' + clean() });
+    let chosen = slotId;
+    // If the guard skipped Look up, assign the slot now.
+    if (!chosen) {
+      const v = await api('/vehicles/lookup/' + clean());
+      setInfo(v);
+      if (v.owner_role === 'visitor') throw new Error('Visitor: verify the QR pass first so the booked slot is filled in.');
+      const s = autoSlot(v.owner_role, await loadSlots());
+      if (!s) throw new Error('No free slot left in the ' + v.owner_role + ' zone.');
+      chosen = String(s.id);
+    }
+    const r = await api('/entry', 'POST', { plate: clean(), slot_id: Number(chosen) });
+    const label = (slots.find((s) => String(s.id) === chosen) || {}).label || 'slot ' + chosen;
+    setMsg({ type: 'ok', text: r.message + ': ' + clean() + ' assigned to ' + label });
     setSlotId(''); loadSlots();
     try { setInfo(await api('/vehicles/lookup/' + clean())); } catch { /* ignore */ }
   });
+
   const exit = () => run(async () => {
     const r = await api('/exit', 'POST', { plate: clean() });
     setMsg({ type: 'ok', text: r.message + ' for ' + clean() });
@@ -69,9 +112,9 @@ export default function Gate({ onExpired }) {
         <label className="field">Number plate
           <input placeholder="e.g. TN01AB1234" value={plate} onChange={(e) => setPlate(e.target.value)} />
         </label>
-        <label className="field">Slot (free slots only)
+        <label className="field">Slot (filled automatically after Look up, you can change it)
           <select value={slotId} onChange={(e) => setSlotId(e.target.value)}>
-            <option value="">Choose a slot...</option>
+            <option value="">Auto-assign from the owner's zone</option>
             {free.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </label>
